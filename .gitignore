@@ -1,0 +1,33 @@
+
+# Virtual environment
+env/
+venv/
+ENV/
+.venv/
+
+# Python compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+*.log
+
+# IDE and editor folders
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# JSON preferences
+preferences.json
+hidden_items.json
+favorites.json
+
+# Other
+*.swp
