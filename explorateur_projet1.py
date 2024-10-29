@@ -50,6 +50,11 @@ class ProjectExplorerApp:
         self.favorites_file = 'favorites.json'
         self.load_favorites()
 
+        # Ensemble des éléments masqués
+        self.hidden_items = set()
+        self.hidden_items_file = 'hidden_items.json'
+        self.load_hidden_items()
+
         # Mapping chemin → identifiant Treeview
         self.path_to_item = {}
 
@@ -126,6 +131,32 @@ class ProjectExplorerApp:
         except Exception as e:
             logging.error(f"Erreur lors de la sauvegarde des favoris: {e}")
 
+    def load_hidden_items(self):
+        """
+        Charge les éléments masqués à partir du fichier JSON.
+        """
+        if os.path.exists(self.hidden_items_file):
+            try:
+                with open(self.hidden_items_file, 'r', encoding='utf-8') as f:
+                    self.hidden_items = set(json.load(f))
+                logging.info("Éléments masqués chargés avec succès.")
+            except Exception as e:
+                logging.error(f"Erreur lors du chargement des éléments masqués: {e}")
+                self.hidden_items = set()
+        else:
+            self.hidden_items = set()
+
+    def save_hidden_items(self):
+        """
+        Sauvegarde les éléments masqués dans le fichier JSON.
+        """
+        try:
+            with open(self.hidden_items_file, 'w', encoding='utf-8') as f:
+                json.dump(list(self.hidden_items), f, ensure_ascii=False, indent=4)
+            logging.info("Éléments masqués sauvegardés avec succès.")
+        except Exception as e:
+            logging.error(f"Erreur lors de la sauvegarde des éléments masqués: {e}")
+
     def load_preferences(self):
         """
         Charge les préférences utilisateur à partir du fichier JSON.
@@ -166,7 +197,7 @@ class ProjectExplorerApp:
         """
         # Cadre pour le chemin du projet
         path_frame = ttk.Frame(self.root, padding="10 10 10 10")
-        path_frame.grid(row=0, column=0, columnspan=6, sticky='ew')
+        path_frame.grid(row=0, column=0, columnspan=7, sticky='ew')
         path_frame.columnconfigure(1, weight=1)
 
         ttk.Label(path_frame, text="Chemin du projet:").grid(row=0, column=0, sticky='w')
@@ -177,6 +208,14 @@ class ProjectExplorerApp:
         # Bouton "Retour"
         self.back_button = ttk.Button(path_frame, text="Retour", command=self.on_back, state='disabled')
         self.back_button.grid(row=0, column=3, padx=5)
+
+        # Bouton "Masquer"
+        hide_button = ttk.Button(path_frame, text="Masquer", command=self.hide_selected_items)
+        hide_button.grid(row=0, column=4, padx=5)
+
+        # Bouton "Afficher masqués"
+        show_hidden_button = ttk.Button(path_frame, text="Afficher Masqués", command=self.show_hidden_items)
+        show_hidden_button.grid(row=0, column=5, padx=5)
 
         # Barre de progression
         self.status_var = tk.StringVar()
@@ -232,6 +271,9 @@ class ProjectExplorerApp:
         self.tree.heading('#0', text='Nom', anchor='w')
         self.tree.column('#0', stretch=True)
 
+        # Après avoir créé self.tree
+        self.tree.tag_configure('hidden', foreground='grey')  # Les éléments masqués apparaîtront en gris
+
         # Sélection des extensions
         ext_label = ttk.Label(self.root, text="Sélectionnez les extensions:")
         ext_label.grid(row=3, column=3, sticky='nw', padx=10, pady=(10, 0))
@@ -252,11 +294,11 @@ class ProjectExplorerApp:
         code_label = ttk.Label(self.root, text="Code des fichiers sélectionnés:")
         code_label.grid(row=7, column=0, sticky='nw', padx=10, pady=(10, 0))
         self.code_text = ScrolledText(self.root, height=15, state='disabled')
-        self.code_text.grid(row=8, column=0, columnspan=6, sticky='nsew', padx=10, pady=5)
+        self.code_text.grid(row=8, column=0, columnspan=7, sticky='nsew', padx=10, pady=5)
 
         # Boutons de copie
         button_frame = ttk.Frame(self.root)
-        button_frame.grid(row=9, column=0, columnspan=6, pady=10)
+        button_frame.grid(row=9, column=0, columnspan=7, pady=10)
         ttk.Button(button_frame, text="Copier l'arborescence", command=self.copy_tree).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Copier le code", command=self.copy_code).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Tout copier", command=self.copy_all).pack(side='left', padx=5)
@@ -285,6 +327,7 @@ class ProjectExplorerApp:
         self.root.columnconfigure(3, weight=1)
         self.root.columnconfigure(4, weight=1)
         self.root.columnconfigure(5, weight=1)
+        self.root.columnconfigure(6, weight=1)
         self.root.rowconfigure(4, weight=3)
         self.root.rowconfigure(8, weight=2)
 
@@ -322,6 +365,7 @@ class ProjectExplorerApp:
         self.context_menu.add_command(label="Copier le Chemin", command=self.copy_path)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Ajouter aux Favoris", command=self.add_to_favorites)
+        self.context_menu.add_command(label="Masquer", command=self.hide_selected_items)
 
         # Lier le clic droit à l'arborescence
         self.tree.bind("<Button-3>", self.show_context_menu)  # Windows/Linux
@@ -345,6 +389,52 @@ class ProjectExplorerApp:
                     self.context_menu.entryconfigure("Ajouter aux Favoris", label="Ajouter aux Favoris",
                                                     command=lambda: self.add_to_favorites(path))
                 self.context_menu.post(event.x_root, event.y_root)
+
+    def hide_selected_items(self):
+        """
+        Masque les fichiers ou dossiers sélectionnés dans l'arborescence.
+        """
+        selected_items = self.tree.selection()
+        for item in selected_items:
+            path = self.tree.item(item, 'values')[0]
+            self.hidden_items.add(path)
+        self.save_hidden_items()
+        self.refresh_tree()
+
+    def show_hidden_items(self):
+        """
+        Affiche une fenêtre pour gérer les éléments masqués.
+        """
+        hidden_window = tk.Toplevel(self.root)
+        hidden_window.title("Éléments Masqués")
+        hidden_window.geometry("400x300")
+
+        hidden_listbox = tk.Listbox(hidden_window)
+        hidden_listbox.pack(fill='both', expand=True)
+
+        for item in self.hidden_items:
+            hidden_listbox.insert(tk.END, item)
+
+        def unhide_selected():
+            selected = hidden_listbox.curselection()
+            for index in selected[::-1]:
+                item = hidden_listbox.get(index)
+                self.hidden_items.remove(item)
+                hidden_listbox.delete(index)
+            self.save_hidden_items()
+            self.refresh_tree()
+
+        unhide_button = ttk.Button(hidden_window, text="Rétablir", command=unhide_selected)
+        unhide_button.pack(pady=5)
+
+    def refresh_tree(self):
+        """
+        Réaffiche l'arborescence en tenant compte des éléments masqués.
+        """
+        self.tree.delete(*self.tree.get_children())
+        self.path_to_item.clear()
+        root_path = self.path_var.get()
+        threading.Thread(target=self.insert_tree_items, args=('', root_path), daemon=True).start()
 
     def open_item(self):
         """
@@ -597,6 +687,8 @@ class ProjectExplorerApp:
                 if item in self.excluded_dirs:
                     continue
                 abs_path = os.path.join(path, item)
+                if abs_path in self.hidden_items:
+                    continue
                 connector = '├── ' if idx < len(items) - 1 else '└── '
                 lines.append(f"{prefix}{connector}{item}")
                 if os.path.isdir(abs_path):
@@ -719,6 +811,8 @@ class ProjectExplorerApp:
             if item in self.excluded_dirs:
                 continue
             abs_path = os.path.join(path, item)
+            if abs_path in self.hidden_items:
+                continue
             try:
                 is_dir = os.path.isdir(abs_path)
                 if is_dir:
@@ -857,6 +951,8 @@ class ProjectExplorerApp:
                     ext = os.path.splitext(file)[1]
                     if ext in selected_exts:
                         file_path = os.path.join(root_dir, file)
+                        if file_path in self.hidden_items:
+                            continue
                         self.queue.put(('insert_code', f"# Chemin de {file_path}\n"))
                         try:
                             with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
@@ -1173,6 +1269,7 @@ class ProjectExplorerApp:
         """
         self.save_preferences()
         self.save_favorites()
+        self.save_hidden_items()
         self.root.destroy()
 
 
