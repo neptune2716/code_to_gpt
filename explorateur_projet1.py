@@ -60,6 +60,14 @@ class ProjectExplorerApp:
 
         # Charger les préférences utilisateur
         self.load_preferences()
+        # Restaurer la taille de la fenêtre
+        if self.window_geometry:
+            self.root.geometry(self.window_geometry)
+        # Restaurer les extensions sélectionnées
+        for ext, var in self.ext_vars.items():
+            var.set(ext in self.selected_extensions)
+        # Restaurer les éléments masqués
+        self.hidden_items = set(self.hidden_items_list)
 
         # Indicateur de chargement initial
         self.is_initial_loading = False
@@ -162,28 +170,32 @@ class ProjectExplorerApp:
         Charge les préférences utilisateur à partir du fichier JSON.
         """
         self.preferences_file = 'preferences.json'
+        self.path_var = tk.StringVar()
+        self.window_geometry = None
+        self.selected_extensions = []
+        self.hidden_items_list = []
         if os.path.exists(self.preferences_file):
             try:
                 with open(self.preferences_file, 'r', encoding='utf-8') as f:
                     prefs = json.load(f)
-                self.root.geometry(prefs.get("window_geometry", "1400x800"))
-                self.path_var = tk.StringVar(value=prefs.get("last_path", ""))
-                logging.info("Préférences chargées avec succès.")
+                self.path_var.set(prefs.get("last_path", ""))
+                self.window_geometry = prefs.get("window_geometry")
+                self.selected_extensions = prefs.get("selected_extensions", [])
+                self.hidden_items_list = prefs.get("hidden_items", [])
             except Exception as e:
                 logging.error(f"Erreur lors du chargement des préférences: {e}")
-                self.path_var = tk.StringVar()
-        else:
-            self.path_var = tk.StringVar()
 
     def save_preferences(self):
         """
         Sauvegarde les préférences utilisateur dans le fichier JSON.
         """
         try:
+            selected_extensions = [ext for ext, var in self.ext_vars.items() if var.get()]
             prefs = {
                 "window_geometry": self.root.geometry(),
                 "last_path": self.path_var.get(),
-                # Sauvegarder d'autres préférences si nécessaire
+                "selected_extensions": selected_extensions,
+                "hidden_items": list(self.hidden_items),
             }
             with open(self.preferences_file, 'w', encoding='utf-8') as f:
                 json.dump(prefs, f, ensure_ascii=False, indent=4)
@@ -221,42 +233,63 @@ class ProjectExplorerApp:
         self.status_var = tk.StringVar()
         self.status_var.set("Prêt")
         self.progress = ttk.Progressbar(self.root, orient='horizontal', mode='determinate')
-        self.progress.grid(row=1, column=0, columnspan=5, sticky='ew', padx=10)
+        self.progress.grid(row=1, column=0, columnspan=7, sticky='ew', padx=10)
         self.status_label = ttk.Label(self.root, textvariable=self.status_var)
-        self.status_label.grid(row=1, column=5, sticky='e', padx=10)
+        self.status_label.grid(row=1, column=6, sticky='e', padx=10)
 
         # Indicateur de chargement supplémentaire (UI Improvement)
         self.loading_label = ttk.Label(self.root, text="Chargement en cours...", foreground="blue")
-        self.loading_label.grid(row=10, column=0, columnspan=6, pady=5)
+        self.loading_label.grid(row=10, column=0, columnspan=7, pady=5)
         self.loading_label.grid_remove()  # Masquer par défaut
 
-        # Zone de recherche avancée
-        search_frame = ttk.LabelFrame(self.root, text="Recherche Avancée", padding="10 10 10 10")
-        search_frame.grid(row=2, column=0, columnspan=6, sticky='ew', padx=10, pady=10)
-        search_frame.columnconfigure(1, weight=1)
+        # Remplacer la zone de recherche statique par un champ de recherche simple
+        simple_search_frame = ttk.Frame(self.root)
+        simple_search_frame.grid(row=2, column=0, columnspan=7, sticky='ew', padx=10, pady=5)
+        simple_search_frame.columnconfigure(1, weight=1)
 
-        # Critère de nom
-        ttk.Label(search_frame, text="Nom contient:").grid(row=0, column=0, sticky='w', pady=2)
+        ttk.Label(simple_search_frame, text="Rechercher:").grid(row=0, column=0, sticky='w')
+        self.simple_search_var = tk.StringVar()
+        self.simple_search_entry = ttk.Entry(simple_search_frame, textvariable=self.simple_search_var)
+        self.simple_search_entry.grid(row=0, column=1, sticky='ew', padx=5)
+
+        # Bouton pour déployer la recherche avancée
+        self.toggle_advanced_button = ttk.Button(simple_search_frame, text="Recherche Avancée", command=self.toggle_advanced_search)
+        self.toggle_advanced_button.grid(row=0, column=2, padx=5)
+
+        # Cadre de recherche avancée (initialement masqué)
+        self.advanced_search_frame = ttk.LabelFrame(self.root, text="Recherche Avancée", padding="10 10 10 10")
+        self.advanced_search_frame.grid(row=3, column=0, columnspan=7, sticky='ew', padx=10)
+        self.advanced_search_frame.columnconfigure(1, weight=1)
+        self.advanced_search_frame.grid_remove()  # Masquer initialement
+
+        # Déplacer les widgets de recherche avancée dans self.advanced_search_frame
+        ttk.Label(self.advanced_search_frame, text="Nom contient:").grid(row=0, column=0, sticky='w', pady=2)
         self.search_name_var = tk.StringVar()
-        self.search_name_entry = ttk.Entry(search_frame, textvariable=self.search_name_var)
+        self.search_name_entry = ttk.Entry(self.advanced_search_frame, textvariable=self.search_name_var)
         self.search_name_entry.grid(row=0, column=1, sticky='ew', padx=5, pady=2)
 
         # Critère d'extension
-        ttk.Label(search_frame, text="Type de Fichier:").grid(row=1, column=0, sticky='w', pady=2)
+        ttk.Label(self.advanced_search_frame, text="Type de Fichier:").grid(row=1, column=0, sticky='w', pady=2)
         self.search_ext_var = tk.StringVar()
-        self.search_ext_entry = ttk.Entry(search_frame, textvariable=self.search_ext_var)
+        self.search_ext_entry = ttk.Entry(self.advanced_search_frame, textvariable=self.search_ext_var)
         self.search_ext_entry.grid(row=1, column=1, sticky='ew', padx=5, pady=2)
-        ttk.Label(search_frame, text="(ex: .py, .txt)").grid(row=1, column=2, sticky='w', pady=2)
+        ttk.Label(self.advanced_search_frame, text="(ex: .py, .txt)").grid(row=1, column=2, sticky='w', pady=2)
 
         # Critère de date de modification
-        ttk.Label(search_frame, text="Date de Modification après:").grid(row=2, column=0, sticky='w', pady=2)
+        ttk.Label(self.advanced_search_frame, text="Date de Modification après:").grid(row=2, column=0, sticky='w', pady=2)
         self.search_date_var = tk.StringVar()
-        self.search_date_entry = ttk.Entry(search_frame, textvariable=self.search_date_var)
+        self.search_date_entry = ttk.Entry(self.advanced_search_frame, textvariable=self.search_date_var)
         self.search_date_entry.grid(row=2, column=1, sticky='ew', padx=5, pady=2)
-        ttk.Label(search_frame, text="(format: YYYY-MM-DD)").grid(row=2, column=2, sticky='w', pady=2)
+        ttk.Label(self.advanced_search_frame, text="(format: YYYY-MM-DD)").grid(row=2, column=2, sticky='w', pady=2)
 
         # Bouton de recherche avancée
-        ttk.Button(search_frame, text="Rechercher", command=self.on_search).grid(row=3, column=1, sticky='e', pady=5)
+        ttk.Button(self.advanced_search_frame, text="Rechercher", command=self.on_advanced_search).grid(row=3, column=1, sticky='e', pady=5)
+
+        # Ajuster les poids de la grille pour une meilleure réactivité
+        self.root.columnconfigure(0, weight=3)  # Arborescence
+        self.root.columnconfigure(3, weight=2)  # Sélection des extensions
+        self.root.rowconfigure(4, weight=3)     # Ligne de l'arborescence
+        self.root.rowconfigure(8, weight=2)     # Ligne de l'affichage du code
 
         # Treeview pour l'arborescence
         tree_label = ttk.Label(self.root, text="Architecture du projet:")
@@ -341,6 +374,10 @@ class ProjectExplorerApp:
         # Remplir la liste des favoris
         self.update_favorites_listbox()
 
+        # Actualiser les sélections des extensions après la création des widgets
+        for ext, var in self.ext_vars.items():
+            var.set(ext in self.selected_extensions)
+
     def bind_events(self):
         """
         Lie les événements aux widgets.
@@ -398,7 +435,8 @@ class ProjectExplorerApp:
         for item in selected_items:
             path = self.tree.item(item, 'values')[0]
             self.hidden_items.add(path)
-        self.save_hidden_items()
+        # Enregistrer les préférences mises à jour
+        self.save_preferences()
         self.refresh_tree()
 
     def show_hidden_items(self):
@@ -896,7 +934,7 @@ class ProjectExplorerApp:
         known_text_extensions = {
             '.txt', '.py', '.md', '.c', '.cpp', '.h', '.java', '.js', '.html', '.css',
             '.json', '.xml', '.csv', '.ini', '.cfg', '.bat', '.sh', '.rb', '.php', '.pl',
-            '.yaml', '.yml', '.sql', '.r', '.go', '.kt', '.swift', '.ts', '.tsx', '.jsx',
+            '.yaml', '.yml', '.sql', '.r', '.go', '.kt', '.swift', '.ts', '.tsx', '.jsx', '.tex'
             # Ajoutez d'autres extensions si nécessaire
         }
         for root_dir, dirs, files in os.walk(path):
@@ -920,6 +958,17 @@ class ProjectExplorerApp:
         """
         for var in self.ext_vars.values():
             var.set(False)
+
+    def is_hidden(self, path):
+        """
+        Vérifie si le chemin est masqué ou si l'un de ses dossiers parents est masqué.
+        """
+        path = os.path.abspath(path)
+        for hidden_path in self.hidden_items:
+            hidden_path = os.path.abspath(hidden_path)
+            if path == hidden_path or path.startswith(hidden_path + os.sep):
+                return True
+        return False
 
     def on_generate_code(self):
         """
@@ -946,12 +995,14 @@ class ProjectExplorerApp:
             self.queue.put(('progress_max', 100))
             self.queue.put(('progress_value', 0))
             for root_dir, dirs, files in os.walk(path):
-                dirs[:] = [d for d in dirs if d not in self.excluded_dirs]
+                if self.is_hidden(root_dir):
+                    continue
+                dirs[:] = [d for d in dirs if not self.is_hidden(os.path.join(root_dir, d))]
                 for file in files:
                     ext = os.path.splitext(file)[1]
                     if ext in selected_exts:
                         file_path = os.path.join(root_dir, file)
-                        if file_path in self.hidden_items:
+                        if self.is_hidden(file_path):
                             continue
                         self.queue.put(('insert_code', f"# Chemin de {file_path}\n"))
                         try:
@@ -973,6 +1024,17 @@ class ProjectExplorerApp:
             self.queue.put(('status', "Erreur lors de la génération"))
 
     def on_search(self):
+        """
+        Méthode pour la recherche simple
+        """
+        query = self.simple_search_var.get().lower()
+        if not query:
+            messagebox.showwarning("Attention", "Veuillez entrer un terme de recherche.")
+            return
+        # Lancer la recherche dans un thread séparé
+        threading.Thread(target=self.search_thread, args=(query,), daemon=True).start()
+
+    def on_advanced_search(self):
         """
         Recherche les éléments correspondant aux critères avancés en parcourant le système de fichiers.
         """
@@ -1002,7 +1064,7 @@ class ProjectExplorerApp:
         # Démarrer le thread de recherche
         threading.Thread(target=self.search_thread, args=(query_name, query_ext, query_date), daemon=True).start()
 
-    def search_thread(self, name, ext, date):
+    def search_thread(self, query):
         """
         Thread pour effectuer la recherche avancée en parcourant le système de fichiers.
         """
@@ -1017,20 +1079,20 @@ class ProjectExplorerApp:
                     basename = os.path.basename(file_path).lower()
 
                     # Critère de nom
-                    if name and name not in basename:
+                    if query and query not in basename:
                         continue
 
                     # Critère d'extension
-                    if ext:
+                    if query:
                         file_ext = os.path.splitext(file)[1].lower()
-                        ext_list = [e.strip() for e in ext.split(',')]
+                        ext_list = [e.strip() for e in query.split(',')]
                         if file_ext not in ext_list:
                             continue
 
                     # Critère de date de modification
-                    if date:
+                    if query:
                         try:
-                            date_obj = datetime.datetime.strptime(date, "%Y-%m-%d")
+                            date_obj = datetime.datetime.strptime(query, "%Y-%m-%d")
                             mod_time = datetime.datetime.fromtimestamp(os.path.getmtime(file_path))
                             if mod_time < date_obj:
                                 continue
@@ -1271,6 +1333,18 @@ class ProjectExplorerApp:
         self.save_favorites()
         self.save_hidden_items()
         self.root.destroy()
+
+
+    def toggle_advanced_search(self):
+        """
+        Méthode pour afficher ou masquer la recherche avancée
+        """
+        if self.advanced_search_frame.winfo_viewable():
+            self.advanced_search_frame.grid_remove()
+            self.toggle_advanced_button.config(text="Recherche Avancée")
+        else:
+            self.advanced_search_frame.grid()
+            self.toggle_advanced_button.config(text="Masquer Recherche Avancée")
 
 
 # Initialiser TkinterDnD
