@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 from tkinter.scrolledtext import ScrolledText
 from ttkbootstrap import Style
-from tkinter import ttk
+from tkinter import ttk, mainloop
 import logging
 from tkinterdnd2 import DND_FILES, TkinterDnD
 from PIL import Image, ImageTk
@@ -30,9 +30,24 @@ class ProjectExplorerApp:
         self.root.title("Explorateur de Projet")
         self.root.geometry("1400x800")  # Ajusté pour plus d'espace
 
-        # Appliquer le style ttkbootstrap
-        style = Style(theme="flatly")
+        # Initialize theme and fullscreen variables before loading preferences
+        self.current_theme = 'flatly'      # Default theme
+        self.is_fullscreen = False         # Default full-screen state
+
+        # Load user preferences
+        self.load_preferences()
+
+        # Apply the theme after loading preferences
+        style = Style(theme=self.current_theme)
         style.configure('Treeview', rowheight=25)
+
+        # Apply full-screen mode if set
+        self.root.attributes('-fullscreen', self.is_fullscreen)
+
+        # Restore window geometry
+        if self.window_geometry:
+            self.root.geometry(self.window_geometry)
+
         self.ext_vars = {}
         self.excluded_dirs = ['node_modules', '__pycache__', '.git', '__svn__', '__hg__', 'Google Drive']  # Répertoires à exclure
 
@@ -174,14 +189,18 @@ class ProjectExplorerApp:
         self.window_geometry = None
         self.selected_extensions = []
         self.hidden_items_list = []
+        self.current_theme = 'flatly'        # Default theme
+        self.is_fullscreen = False           # Default full-screen state
         if os.path.exists(self.preferences_file):
             try:
                 with open(self.preferences_file, 'r', encoding='utf-8') as f:
                     prefs = json.load(f)
+                self.window_geometry = prefs.get("window_geometry", "1400x800+0+0")
                 self.path_var.set(prefs.get("last_path", ""))
-                self.window_geometry = prefs.get("window_geometry")
                 self.selected_extensions = prefs.get("selected_extensions", [])
                 self.hidden_items_list = prefs.get("hidden_items", [])
+                self.current_theme = prefs.get("current_theme", 'flatly')            # Load theme
+                self.is_fullscreen = prefs.get("is_fullscreen", False)              # Load full-screen state
             except Exception as e:
                 logging.error(f"Erreur lors du chargement des préférences: {e}")
 
@@ -196,6 +215,8 @@ class ProjectExplorerApp:
                 "last_path": self.path_var.get(),
                 "selected_extensions": selected_extensions,
                 "hidden_items": list(self.hidden_items),
+                "current_theme": self.current_theme,        # Added theme
+                "is_fullscreen": self.is_fullscreen         # Added full-screen state
             }
             with open(self.preferences_file, 'w', encoding='utf-8') as f:
                 json.dump(prefs, f, ensure_ascii=False, indent=4)
@@ -377,6 +398,20 @@ class ProjectExplorerApp:
         # Actualiser les sélections des extensions après la création des widgets
         for ext, var in self.ext_vars.items():
             var.set(ext in self.selected_extensions)
+
+        # Create a menu bar
+        menu_bar = tk.Menu(self.root)
+        self.root.config(menu=menu_bar)
+
+        # Create 'View' menu
+        view_menu = tk.Menu(menu_bar, tearoff=0)
+        menu_bar.add_cascade(label='Affichage', menu=view_menu)
+
+        # Add theme toggle option
+        view_menu.add_command(label='Basculer Thème Sombre', command=self.toggle_theme)
+
+        # Add full-screen toggle option
+        view_menu.add_command(label='Plein Écran', command=self.toggle_fullscreen)
 
     def bind_events(self):
         """
@@ -1346,9 +1381,32 @@ class ProjectExplorerApp:
             self.advanced_search_frame.grid()
             self.toggle_advanced_button.config(text="Masquer Recherche Avancée")
 
+    def toggle_theme(self):
+        """
+        Toggle between light and dark themes.
+        """
+        if self.current_theme == 'flatly':
+            self.current_theme = 'darkly'
+        else:
+            self.current_theme = 'flatly'
+        style = Style(theme=self.current_theme)
+        self.save_preferences()  # Save the new theme
+
+    def toggle_fullscreen(self):
+        """
+        Toggle full-screen mode.
+        """
+        self.is_fullscreen = not self.is_fullscreen
+        self.root.attributes('-fullscreen', self.is_fullscreen)
+        self.save_preferences()  # Save the full-screen state
+
 
 # Initialiser TkinterDnD
 if __name__ == "__main__":
-    root = TkinterDnD.Tk()
-    app = ProjectExplorerApp(root)
-    root.mainloop()
+    try:
+        root = TkinterDnD.Tk()  # Initialize the root window
+        app = ProjectExplorerApp(root)
+        mainloop()
+    except Exception as e:
+        logging.error(f"Erreur lors de l'initialisation de TkinterDnD: {e}")
+        messagebox.showerror("Erreur", f"Erreur lors de l'initialisation de TkinterDnD: {e}")
