@@ -40,6 +40,8 @@ class ProjectExplorerApp:
         if self.window_geometry:
             self.root.geometry(self.window_geometry)
 
+            self.root.geometry(self.window_geometry)
+
         self.ext_vars = {}
         self.excluded_dirs = ['node_modules', '__pycache__', '.git', '__svn__', '__hg__', 'Google Drive']
         self.history_stack = []
@@ -56,7 +58,25 @@ class ProjectExplorerApp:
         self.root.after(100, self.process_queue)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+        self.notification_var = tk.StringVar()
+        self.notification_label = ttk.Label(
+            self.root, textvariable=self.notification_var, foreground="blue"
+        )
+        self.notification_label.grid(
+            row=2, column=0, columnspan=7, sticky='ew', padx=10, pady=5
+        )
+        self.notification_label.grid_remove()
+
     def load_icons(self, folder_path, file_path, size=(16, 16)):
+        try:
+            folder_image = Image.open(folder_path).resize(size, Image.LANCZOS)
+            file_image = Image.open(file_path).resize(size, Image.LANCZOS)
+            return ImageTk.PhotoImage(folder_image), ImageTk.PhotoImage(file_image)
+        except Exception as e:
+            logging.warning(f"Impossible de charger les icônes: {e}")
+            return None, None
+
+    def create_widgets(self):
         try:
             folder_image = Image.open(folder_path).resize(size, Image.LANCZOS)
             file_image = Image.open(file_path).resize(size, Image.LANCZOS)
@@ -272,7 +292,7 @@ class ProjectExplorerApp:
                     subprocess.run(['xdg-open', path], check=True)
             except Exception as e:
                 logging.error(f"Erreur d'ouverture: {e}")
-                messagebox.showerror("Erreur", f"Erreur: {e}")
+                self.show_notification(f"Erreur: {e}")
 
     def rename_item(self):
         selected_item = self.tree.selection()
@@ -283,7 +303,7 @@ class ProjectExplorerApp:
             if new_name:
                 new_path = os.path.join(os.path.dirname(path), new_name)
                 if os.path.exists(new_path):
-                    messagebox.showerror("Erreur", f"Le nom '{new_name}' existe déjà.")
+                    self.show_notification(f"Le nom '{new_name}' existe déjà.")
                     return
                 try:
                     os.rename(path, new_path)
@@ -294,7 +314,7 @@ class ProjectExplorerApp:
                         self.favorites = self.favorites_manager.favorites
                         self.update_favorites_listbox()
                 except Exception as e:
-                    messagebox.showerror("Erreur", f"Impossible: {e}")
+                    self.show_notification(f"Impossible de renommer: {e}")
 
     def delete_item(self):
         selected_item = self.tree.selection()
@@ -314,7 +334,7 @@ class ProjectExplorerApp:
                             self.favorites = self.favorites_manager.favorites
                             self.update_favorites_listbox()
                     except Exception as e:
-                        messagebox.showerror("Erreur", f"Erreur: {e}")
+                        self.show_notification(f"Erreur de suppression: {e}")
 
     def copy_path(self):
         selected_item = self.tree.selection()
@@ -323,7 +343,7 @@ class ProjectExplorerApp:
             paths_str = '\n'.join(paths)
             self.root.clipboard_clear()
             self.root.clipboard_append(paths_str)
-            messagebox.showinfo("Succès", "Chemin copié.")
+            self.show_notification("Chemin copié.")
 
     def add_to_favorites(self, path=None):
         if not path:
@@ -334,7 +354,7 @@ class ProjectExplorerApp:
         self.favorites_manager.add_favorite(path)
         self.favorites = self.favorites_manager.favorites
         self.update_favorites_listbox()
-        messagebox.showinfo("Succès", f"'{path}' ajouté aux favoris.")
+        self.show_notification(f"'{path}' ajouté aux favoris.")
 
     def remove_from_favorites(self):
         selection = self.favorites_listbox.curselection()
@@ -385,9 +405,9 @@ class ProjectExplorerApp:
             tree_str = self.get_full_treeview_items()
             self.root.clipboard_clear()
             self.root.clipboard_append(tree_str)
-            messagebox.showinfo("Succès", "Arborescence copiée.")
+            self.show_notification("Arborescence copiée.")
         except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur: {e}")
+            self.show_notification(f"Erreur: {e}")
 
     def get_full_treeview_items(self):
         path = self.path_var.get()
@@ -414,9 +434,9 @@ class ProjectExplorerApp:
             code_str = self.code_text.get('1.0', tk.END)
             self.root.clipboard_clear()
             self.root.clipboard_append(code_str)
-            messagebox.showinfo("Succès", "Code copié.")
+            self.show_notification("Code copié.")
         except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur: {e}")
+            self.show_notification(f"Erreur: {e}")
 
     def copy_all(self):
         try:
@@ -425,9 +445,9 @@ class ProjectExplorerApp:
             all_str = tree_str + '\n' + code_str
             self.root.clipboard_clear()
             self.root.clipboard_append(all_str)
-            messagebox.showinfo("Succès", "Arborescence et code copiés.")
+            self.show_notification("Arborescence et code copiés.")
         except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur: {e}")
+            self.show_notification(f"Erreur: {e}")
 
     def on_browse(self):
         path = filedialog.askdirectory()
@@ -552,7 +572,7 @@ class ProjectExplorerApp:
         self.code_text.configure(state='normal')
         self.code_text.delete('1.0', tk.END)
         if not selected_exts:
-            messagebox.showwarning("Avertissement", "Aucune extension sélectionnée.")
+            self.show_notification("Aucune extension sélectionnée.")
             self.code_text.configure(state='disabled')
             return
         threading.Thread(target=self.generate_code_thread, args=(path, selected_exts), daemon=True).start()
@@ -580,7 +600,7 @@ class ProjectExplorerApp:
                         except Exception as e:
                             self.queue.put(('insert_code', f"Erreur lecture {file_path}: {e}\n\n--------\n\n"))
             self.queue.put(('status', "Terminé"))
-            self.queue.put(('show_message', "Succès", "Génération du code terminée."))
+            self.queue.put(('show_notification', "Génération du code terminée."))
         except Exception as e:
             self.queue.put(('error_message', f"Erreur code: {e}"))
             self.queue.put(('status', "Erreur"))
@@ -659,12 +679,12 @@ class ProjectExplorerApp:
                     self.code_text.configure(state='normal')
                     self.code_text.insert(tk.END, code)
                     self.code_text.configure(state='disabled')
-                elif task[0] == 'show_message':
-                    _, title, message = task
-                    messagebox.showinfo(title, message)
+                elif task[0] == 'show_notification':
+                    _, message = task
+                    self.show_notification(message)
                 elif task[0] == 'error_message':
                     _, message = task
-                    messagebox.showerror("Erreur", message)
+                    self.show_notification(message)
                 elif task[0] == 'search_results':
                     _, matches = task
                     self.show_search_results(matches)
@@ -710,7 +730,7 @@ class ProjectExplorerApp:
                 else:
                     subprocess.run(['xdg-open', path], check=True)
             except Exception as e:
-                messagebox.showerror("Erreur", f"Erreur: {e}")
+                self.show_notification(f"Erreur: {e}")
 
     def show_in_tree(self, listbox):
         selection = listbox.curselection()
@@ -720,7 +740,7 @@ class ProjectExplorerApp:
                 self.open_parents(path)
                 self.highlight_path(path)
             else:
-                messagebox.showerror("Erreur", f"'{path}' n'existe plus.")
+                self.show_notification(f"'{path}' n'existe plus.")
 
     def open_parents(self, path):
         # Simplifié : recharger l'arbo si besoin
@@ -752,7 +772,7 @@ class ProjectExplorerApp:
                 self.path_var.set(path)
                 self.on_path_change()
             else:
-                messagebox.showwarning("Avertissement", "Veuillez déposer un dossier.")
+                self.show_notification("Veuillez déposer un dossier.")
 
     def on_close(self):
         selected_extensions = [ext for ext, var in self.ext_vars.items() if var.get()]
@@ -766,6 +786,7 @@ class ProjectExplorerApp:
         )
         self.favorites_manager.save_favorites()
         self.hidden_manager.save_hidden_items()
+        self.show_notification("Préférences sauvegardées.")
         self.root.destroy()
 
     def toggle_theme(self):
@@ -785,6 +806,7 @@ class ProjectExplorerApp:
         )
 
     def toggle_fullscreen(self):
+        
         self.is_fullscreen = not self.is_fullscreen
         self.root.attributes('-fullscreen', self.is_fullscreen)
         self.config_manager.save_preferences(
@@ -795,3 +817,9 @@ class ProjectExplorerApp:
             current_theme=self.current_theme,
             is_fullscreen=self.is_fullscreen
         )
+
+    def show_notification(self, message, duration=3000):
+        self.notification_var.set(message)
+        self.notification_label.grid()
+        self.root.after(duration, self.notification_label.grid_remove)
+

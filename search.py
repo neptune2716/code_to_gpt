@@ -14,14 +14,12 @@ class SearchManager:
             try:
                 datetime.datetime.strptime(date, "%Y-%m-%d")
             except ValueError:
-                messagebox.showerror("Erreur de format", "Date invalide (YYYY-MM-DD).")
-                return False
+                return "Date invalide (YYYY-MM-DD)."
         if ext:
             for e in [x.strip() for x in ext.split(',')]:
                 if not e.startswith('.'):
-                    messagebox.showerror("Erreur de format", f"Extension '{e}' invalide.")
-                    return False
-        return True
+                    return f"Extension '{e}' invalide."
+        return None
 
     def search_thread(self, queue, name, ext, date):
         try:
