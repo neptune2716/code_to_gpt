@@ -10,6 +10,7 @@ from PIL import Image, ImageTk
 import shutil
 import subprocess
 import logging
+from datetime import datetime
 
 from config import ConfigManager
 from favorites import FavoritesManager
@@ -191,6 +192,7 @@ class ProjectExplorerApp:
         ttk.Button(button_frame, text="Copier l'arborescence", command=self.copy_tree).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Copier le code", command=self.copy_code).pack(side='left', padx=5)
         ttk.Button(button_frame, text="Tout copier", command=self.copy_all).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Exporter Tout", command=self.export_all_to_file).pack(side='left', padx=5)
 
         favorites_label = ttk.Label(self.root, text="Favoris:")
         favorites_label.grid(row=3, column=4, sticky='nw', padx=10, pady=(10, 0))
@@ -822,4 +824,17 @@ class ProjectExplorerApp:
         self.notification_var.set(message)
         self.notification_label.grid()
         self.root.after(duration, self.notification_label.grid_remove)
+
+    def export_all_to_file(self):
+        folder_name = os.path.basename(self.path_var.get())
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"codebase_{folder_name}_{timestamp}.txt"
+        export_path = os.path.join(self.path_var.get(), filename)
+        tree_str = self.get_full_treeview_items()
+        code_str = self.code_text.get('1.0', tk.END)
+        with open(export_path, 'w', encoding='utf-8') as f:
+            f.write(tree_str)
+            f.write("\n\n")
+            f.write(code_str)
+        self.show_notification(f"Exporté dans le fichier: {export_path}")
 
