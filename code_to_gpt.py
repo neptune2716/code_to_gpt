@@ -53,9 +53,8 @@ class ProjectExplorerApp:
         # Charger les préférences (qui peuvent écraser certaines valeurs par défaut)
         self.load_preferences()
         
-        # Forcer le mode plein écran au démarrage, indépendamment des préférences
-        self.is_fullscreen = True
-        self.root.attributes('-fullscreen', True)
+        # Maximiser la fenêtre en mode fenêtré prenant toute la taille de l'écran
+        self.root.state('zoomed')
 
         # Remettre l'initialisation du style ttkbootstrap
         style = Style(theme=self.current_theme)
@@ -72,8 +71,7 @@ class ProjectExplorerApp:
         # La configuration de 'Card.TListbox' n'est pas supportée par ttkbootstrap et a été enlevée
         # style.configure('Card.TListbox', borderwidth=1, relief='solid', padding=2)
 
-        # Appliquer le mode plein écran si nécessaire
-        self.root.attributes('-fullscreen', self.is_fullscreen)
+        # Fenêtre déjà maximisée, pas de mode plein écran
 
         # Restaurer la géométrie de la fenêtre
         if self.window_geometry:
