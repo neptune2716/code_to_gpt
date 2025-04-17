@@ -23,14 +23,16 @@ This file tracks potential improvements for the `code_to_gpt.py` application.
 
 ## Modernize Python Usage
 
--   [ ] Replace `os` module usage with `pathlib` for path manipulations.
--   [ ] Use f-strings for string formatting.
+-   [x] Replace `os` module usage with `pathlib` for path manipulations.
+-   [x] Use f-strings for string formatting.
 
 ## Code Structure and Readability
 
--   [ ] Define constants for filenames, default values, and magic numbers/strings.
--   [ ] Sort imports according to PEP 8 and remove unused imports.
--   [ ] Identify and remove redundant code (e.g., `known_text_extensions` definition, duplicated theme/fullscreen init).
+-   [x] Define constants for filenames, default values, and magic numbers/strings.
+-   [x] Sort imports according to PEP 8 and remove unused imports.
+-   [x] Identify and remove redundant code (e.g., `known_text_extensions` definition, duplicated theme/fullscreen init).
+    -   [x] `known_text_extensions` definition removed
+    -   [x] duplicated theme/fullscreen init
 -   [ ] Ensure general adherence to PEP 8 style guidelines.
 
 ## UI Responsiveness

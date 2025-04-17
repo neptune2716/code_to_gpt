@@ -1,24 +1,25 @@
-# Modification de l'ordre des imports
-import os
-import threading
-import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
-from tkinter.scrolledtext import ScrolledText
-from tkinter import ttk, mainloop
-import logging
-from PIL import Image, ImageTk
-import queue
-import datetime
-import sys
+
+import datetime  
 import json
+import logging
+import os
+import queue
 import shutil
 import subprocess
-from tkinter import font
+import threading
+import tkinter as tk
+from tkinter import filedialog, font, messagebox, simpledialog
+from tkinter import ttk
+from tkinter.scrolledtext import ScrolledText
+
+# Third-party imports
+from PIL import Image, ImageTk
 from ttkbootstrap import Style
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
 # Configure logging
-logging.basicConfig(filename='project_explorer.log', level=logging.INFO,
+LOG_FILE = 'project_explorer.log'
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 
@@ -27,6 +28,11 @@ class ProjectExplorerApp:
     Classe principale de l'application Explorateur de Projet.
     Gère l'interface utilisateur et la logique métier.
     """
+    # Define constants for configuration files
+    PREFERENCES_FILE = 'preferences.json'
+    FAVORITES_FILE = 'favorites.json'
+    HIDDEN_ITEMS_FILE = 'hidden_items.json'
+
     def __init__(self, root):
         self.root = root
         self.root.title("Explorateur de Projet")
@@ -42,8 +48,6 @@ class ProjectExplorerApp:
         self.is_fullscreen = True         # Default full-screen state
 
         # Initialiser les variables avant le chargement des préférences
-        self.current_theme = 'flatly'      # Default theme
-        self.is_fullscreen = True          # Default full-screen state
         self.window_geometry = None
         self.path_var = tk.StringVar()
         self.font_size = 12
@@ -91,13 +95,15 @@ class ProjectExplorerApp:
 
         # Structure de données pour les favoris
         self.favorites = set()
-        self.favorites_file = 'favorites.json'
-        self.load_favorites()
+        # Use constant for favorites file
+        self.load_favorites() # Load before assigning self.favorites_file if load_favorites uses it
+        self.favorites_file = self.FAVORITES_FILE # Keep for potential direct use elsewhere, though load/save use constant
 
         # Ensemble des éléments masqués
         self.hidden_items = set()
-        self.hidden_items_file = 'hidden_items.json'
-        self.load_hidden_items()
+        # Use constant for hidden items file
+        self.load_hidden_items() # Load before assigning self.hidden_items_file
+        self.hidden_items_file = self.HIDDEN_ITEMS_FILE # Keep for potential direct use elsewhere
 
         # Mapping chemin → identifiant Treeview
         self.path_to_item = {}
@@ -165,20 +171,20 @@ class ProjectExplorerApp:
 
             return folder_icon, file_icon
         except (FileNotFoundError, tk.TclError) as e:
-            logging.warning(f"Icons '{folder_path}' et/ou '{file_path}' non trouvés ou invalides. Les icônes ne seront pas affichées. Erreur: {e}")
+            logging.warning(f"Erreur lors du chargement des icônes: {e}")
             return None, None
 
     def load_favorites(self):
         """
         Charge les favoris à partir du fichier JSON.
         """
-        if os.path.exists(self.favorites_file):
+        if os.path.exists(self.FAVORITES_FILE):
             try:
-                with open(self.favorites_file, 'r', encoding='utf-8') as f:
+                with open(self.FAVORITES_FILE, 'r', encoding='utf-8') as f:
                     self.favorites = set(json.load(f))
                 logging.info("Favoris chargés avec succès.")
             except Exception as e:
-                logging.error(f"Erreur lors du chargement des favoris: {e}")
+                logging.error(f"Erreur lors du chargement des favoris depuis {self.FAVORITES_FILE}: {e}")
                 self.favorites = set()
         else:
             self.favorites = set()
@@ -188,23 +194,23 @@ class ProjectExplorerApp:
         Sauvegarde les favoris dans le fichier JSON.
         """
         try:
-            with open(self.favorites_file, 'w', encoding='utf-8') as f:
+            with open(self.FAVORITES_FILE, 'w', encoding='utf-8') as f:
                 json.dump(list(self.favorites), f, ensure_ascii=False, indent=4)
             logging.info("Favoris sauvegardés avec succès.")
         except Exception as e:
-            logging.error(f"Erreur lors de la sauvegarde des favoris: {e}")
+            logging.error(f"Erreur lors de la sauvegarde des favoris dans {self.FAVORITES_FILE}: {e}")
 
     def load_hidden_items(self):
         """
         Charge les éléments masqués à partir du fichier JSON.
         """
-        if os.path.exists(self.hidden_items_file):
+        if os.path.exists(self.HIDDEN_ITEMS_FILE):
             try:
-                with open(self.hidden_items_file, 'r', encoding='utf-8') as f:
+                with open(self.HIDDEN_ITEMS_FILE, 'r', encoding='utf-8') as f:
                     self.hidden_items = set(json.load(f))
                 logging.info("Éléments masqués chargés avec succès.")
             except Exception as e:
-                logging.error(f"Erreur lors du chargement des éléments masqués: {e}")
+                logging.error(f"Erreur lors du chargement des éléments masqués depuis {self.HIDDEN_ITEMS_FILE}: {e}")
                 self.hidden_items = set()
         else:
             self.hidden_items = set()
@@ -214,23 +220,22 @@ class ProjectExplorerApp:
         Sauvegarde les éléments masqués dans le fichier JSON.
         """
         try:
-            with open(self.hidden_items_file, 'w', encoding='utf-8') as f:
+            with open(self.HIDDEN_ITEMS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(list(self.hidden_items), f, ensure_ascii=False, indent=4)
             logging.info("Éléments masqués sauvegardés avec succès.")
         except Exception as e:
-            logging.error(f"Erreur lors de la sauvegarde des éléments masqués: {e}")
+            logging.error(f"Erreur lors de la sauvegarde des éléments masqués dans {self.HIDDEN_ITEMS_FILE}: {e}")
 
     def load_preferences(self):
         """
         Charge les préférences utilisateur à partir du fichier JSON.
         """
-        self.preferences_file = 'preferences.json'
         self.selected_extensions = []
         self.hidden_items_list = []
         
-        if os.path.exists(self.preferences_file):
+        if os.path.exists(self.PREFERENCES_FILE):
             try:
-                with open(self.preferences_file, 'r', encoding='utf-8') as f:
+                with open(self.PREFERENCES_FILE, 'r', encoding='utf-8') as f:
                     prefs = json.load(f)
                 self.window_geometry = prefs.get("window_geometry")
                 self.path_var.set(prefs.get("last_path", ""))
@@ -247,7 +252,7 @@ class ProjectExplorerApp:
                 if known_extensions:
                     self.known_text_extensions = set(known_extensions)
             except Exception as e:
-                logging.error(f"Erreur lors du chargement des préférences: {e}")
+                logging.error(f"Erreur lors du chargement des préférences depuis {self.PREFERENCES_FILE}: {e}")
 
     def save_preferences(self):
         """
@@ -268,11 +273,11 @@ class ProjectExplorerApp:
                 "auto_refresh": self.auto_refresh,
                 "known_extensions": list(self.known_text_extensions)  # Ajout des extensions connues
             }
-            with open(self.preferences_file, 'w', encoding='utf-8') as f:
+            with open(self.PREFERENCES_FILE, 'w', encoding='utf-8') as f:
                 json.dump(prefs, f, ensure_ascii=False, indent=4)
             logging.info("Préférences sauvegardées avec succès.")
         except Exception as e:
-            logging.error(f"Erreur lors de la sauvegarde des préférences: {e}")
+            logging.error(f"Erreur lors de la sauvegarde des préférences dans {self.PREFERENCES_FILE}: {e}")
 
     def create_widgets(self):
         """
@@ -648,8 +653,8 @@ class ProjectExplorerApp:
                     return
                 try:
                     os.rename(old_path, new_path)
+                    logging.info(f"Renamed '{old_path}' to '{new_path}'")
                     self.tree.item(item, text=new_name, values=[new_path])
-                    logging.info(f"Renommé '{old_path}' en '{new_path}'")
                     self.path_to_item[new_path] = self.path_to_item.pop(old_path)
                     if old_path in self.favorites:
                         self.favorites.remove(old_path)
@@ -680,10 +685,11 @@ class ProjectExplorerApp:
                     try:
                         if os.path.isdir(path):
                             shutil.rmtree(path)
+                            logging.info(f"Deleted directory: {path}")
                         else:
                             os.remove(path)
+                            logging.info(f"Deleted file: {path}")
                         self.tree.delete(item)
-                        logging.info(f"Supprimé '{path}'")
                         if path in self.path_to_item:
                             del self.path_to_item[path]
                         if path in self.favorites:
@@ -1014,7 +1020,7 @@ class ProjectExplorerApp:
             self.queue.put(('status', "Chargement terminé"))
             logging.info("Arborescence chargée avec succès")
         except Exception as e:
-            logging.error(f"Erreur lors du chargement de l'arborescence: {e}")
+            logging.error(f"Erreur dans le thread de construction de l'arborescence pour {path}: {e}")
             self.queue.put(('error_message', f"Erreur lors du chargement de l'arborescence: {e}"))
 
     def insert_tree_items(self, parent, path):
@@ -1101,22 +1107,20 @@ class ProjectExplorerApp:
 
     def get_text_extensions(self, path):
         """
-        Récupère les extensions de fichiers textuels du projet.
+        Identifie les extensions de fichiers texte dans le chemin donné.
         """
-        text_extensions = set()
-        known_text_extensions = {
-            '.txt', '.py', '.md', '.c', '.cpp', '.h', '.java', '.js', '.html', '.css',
-            '.json', '.xml', '.csv', '.ini', '.cfg', '.bat', '.sh', '.rb', '.php', '.pl',
-            '.yaml', '.yml', '.sql', '.r', '.go', '.kt', '.swift', '.ts', '.tsx', '.jsx', '.tex',
-            '.log'  # Ajout de l'extension .log
-        }
-        for root_dir, dirs, files in os.walk(path):
-            dirs[:] = [d for d in dirs if d not in self.excluded_dirs]
-            for file in files:
-                ext = os.path.splitext(file)[1]
-                if ext.lower() in known_text_extensions:
-                    text_extensions.add(ext)
-        return sorted(text_extensions)
+        extensions = set()
+        try:
+            for root_dir, dirs, files in os.walk(path):
+                dirs[:] = [d for d in dirs if d not in self.excluded_dirs]
+                for file in files:
+                    ext = os.path.splitext(file)[1]
+                    if ext.lower() in self.known_text_extensions:
+                        extensions.add(ext)
+            return sorted(extensions)
+        except Exception as e:
+            logging.error(f"Erreur lors de la récupération des extensions pour {path}: {e}")
+            return []
 
     def select_all_exts(self):
         """
@@ -1220,8 +1224,24 @@ class ProjectExplorerApp:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                     code += content + "\n\n" # Add content with extra space after
+            except FileNotFoundError:
+                logging.warning(f"Fichier non trouvé lors de la génération du code: {file_path}")
+                code += f"--- Fichier non trouvé: {file_path} ---\n\n"
+            except IOError as e:
+                logging.error(f"Erreur d'E/S lors de la lecture de {file_path}: {e}")
+                code += f"--- Erreur d'E/S: {e} ---\n\n"
+            except UnicodeDecodeError as e:
+                logging.warning(f"Erreur de décodage pour {file_path}: {e}. Tentative avec latin-1.")
+                try:
+                    with open(file_path, 'r', encoding='latin-1') as f:
+                        content = f.read()
+                        code += content + "\n\n"
+                except Exception as e_fallback:
+                    logging.error(f"Erreur de lecture (fallback latin-1) pour {file_path}: {e_fallback}")
+                    code += f"--- Erreur de lecture (fallback latin-1): {e_fallback} ---\n\n"
             except Exception as e:
-                code += f"--- Erreur de lecture du fichier: {e} ---\n\n" # Error message with extra space
+                logging.error(f"Erreur générale lors de la lecture de {file_path}: {e}")
+                code += f"--- Erreur générale: {e} ---\n\n"
 
         self.code_text.insert('1.0', code)
         self.code_text.configure(state='disabled') # Disable after writing
@@ -1698,21 +1718,25 @@ class SettingsWindow(tk.Toplevel):
             self.app.save_preferences()
 
     def apply_settings(self):
-        # Appliquer le thème
-        new_theme = self.theme_var.get()
-        if new_theme != self.app.current_theme:  # Utiliser app au lieu de parent
-            self.app.current_theme = new_theme
-            style = Style(theme=new_theme)
-        
-        # Appliquer la police et la taille
-        self.app.code_font = self.font_var.get()
-        self.app.font_size = self.font_size_var.get()
-        self.app.code_text.configure(font=(self.app.code_font, self.app.font_size))
-        
-        # Sauvegarder les préférences
-        self.app.save_preferences()
-        
-        messagebox.showinfo("Succès", "Les paramètres ont été appliqués avec succès!")
+        try:
+            # Appliquer le thème
+            new_theme = self.theme_var.get()
+            if new_theme != self.app.current_theme:  # Utiliser app au lieu de parent
+                self.app.current_theme = new_theme
+                style = Style(theme=new_theme)
+            
+            # Appliquer la police et la taille
+            self.app.code_font = self.font_var.get()
+            self.app.font_size = self.font_size_var.get()
+            self.app.code_text.configure(font=(self.app.code_font, self.app.font_size))
+            
+            # Sauvegarder les préférences
+            self.app.save_preferences()
+            
+            messagebox.showinfo("Succès", "Les paramètres ont été appliqués avec succès!")
+        except Exception as e:
+            logging.error(f"Erreur lors de l'application des paramètres: {e}")
+            messagebox.showerror("Erreur", f"Impossible d'appliquer les paramètres: {e}")
 
 if __name__ == "__main__":
     try:
