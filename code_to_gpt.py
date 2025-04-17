@@ -1,4 +1,3 @@
-
 import datetime  
 import json
 import logging
@@ -33,11 +32,8 @@ class ProjectExplorerApp:
     FAVORITES_FILE = 'favorites.json'
     HIDDEN_ITEMS_FILE = 'hidden_items.json'
 
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Explorateur de Projet")
-        self.root.geometry("1400x800")  # Ajusté pour plus d'espace
-
+    def _initialize_variables(self):
+        """Initialize instance variables."""
         # Initialize selected_files and related variables VERY EARLY
         self.selected_files = {}             # Dictionary to store all selected files
         self.manual_selected_files = {}        # New: to store manual selections
@@ -53,77 +49,66 @@ class ProjectExplorerApp:
         self.font_size = 12
         self.code_font = "Courier"
         self.auto_refresh = True
+        self.ext_vars = {}
+        self.excluded_dirs = ['node_modules', '__pycache__', '.git', '__svn__', '__hg__', 'Google Drive']
+        self.history_stack = []
+        self.queue = queue.Queue()
+        self.favorites = set()
+        self.hidden_items = set()
+        self.path_to_item = {}
+        self.is_initial_loading = False
+        self.known_text_extensions = {
+            '.txt', '.py', '.md', '.c', '.cpp', '.h', '.java', '.js', '.html', '.css',
+            '.json', '.xml', '.csv', '.ini', '.cfg', '.bat', '.sh', '.rb', '.php', '.pl',
+            '.yaml', '.yml', '.sql', '.r', '.go', '.kt', '.swift', '.ts', '.tsx', '.jsx', '.tex',
+            '.log'
+        }
 
-        # Charger les préférences (qui peuvent écraser certaines valeurs par défaut)
+    def _load_initial_data(self):
+        """Load preferences, favorites, and hidden items."""
         self.load_preferences()
-        
-        # Maximiser la fenêtre en mode fenêtré prenant toute la taille de l'écran
+        self.load_favorites()
+        self.load_hidden_items()
+
+    def _setup_window(self):
+        """Configure the main window."""
+        self.root.title("Explorateur de Projet")
+        self.root.geometry("1400x800")
         self.root.state('zoomed')
-
-        # Remettre l'initialisation du style ttkbootstrap
-        style = Style(theme=self.current_theme)
-        style.configure('Treeview', rowheight=25)
-        
-        # Style pour les frames avec coins arrondis
-        style.configure('Card.TFrame', borderwidth=1, relief='solid')
-        style.configure('Card.TLabelframe', borderwidth=1, relief='solid')
-        
-        # Style pour les boutons avec coins arrondis
-        style.configure('Toggle.TButton', borderwidth=1, relief='solid', padding=5)
-        style.configure('Action.TButton', borderwidth=1, relief='solid', padding=5)
-        
-        # La configuration de 'Card.TListbox' n'est pas supportée par ttkbootstrap et a été enlevée
-        # style.configure('Card.TListbox', borderwidth=1, relief='solid', padding=2)
-
-        # Fenêtre déjà maximisée, pas de mode plein écran
-
-        # Restaurer la géométrie de la fenêtre
         if self.window_geometry:
             self.root.geometry(self.window_geometry)
 
-        self.ext_vars = {}
-        self.excluded_dirs = ['node_modules', '__pycache__', '.git', '__svn__', '__hg__', 'Google Drive']  # Répertoires à exclure
+    def _setup_style(self):
+        """Set up the ttkbootstrap style."""
+        style = Style(theme=self.current_theme)
+        style.configure('Treeview', rowheight=25)
+        style.configure('Card.TFrame', borderwidth=1, relief='solid')
+        style.configure('Card.TLabelframe', borderwidth=1, relief='solid')
+        style.configure('Toggle.TButton', borderwidth=1, relief='solid', padding=5)
+        style.configure('Action.TButton', borderwidth=1, relief='solid', padding=5)
+
+    def __init__(self, root):
+        self.root = root
+        self._initialize_variables()
+        self._load_initial_data()
+        self._setup_window()
+        self._setup_style()
 
         # Charger les icônes si disponibles et les redimensionner
         self.folder_icon, self.file_icon = self.load_icons(folder_path='icons/folder_icon.png', file_path='icons/file_icon.png', size=(16, 16))
 
-        # Pile d'historique pour la navigation "Retour"
-        self.history_stack = []
+        # Keep these for potential direct use elsewhere, though load/save use constant
+        self.favorites_file = self.FAVORITES_FILE
+        self.hidden_items_file = self.HIDDEN_ITEMS_FILE
 
-        # Queue pour la communication entre threads
-        self.queue = queue.Queue()
-
-        # Structure de données pour les favoris
-        self.favorites = set()
-        # Use constant for favorites file
-        self.load_favorites() # Load before assigning self.favorites_file if load_favorites uses it
-        self.favorites_file = self.FAVORITES_FILE # Keep for potential direct use elsewhere, though load/save use constant
-
-        # Ensemble des éléments masqués
-        self.hidden_items = set()
-        # Use constant for hidden items file
-        self.load_hidden_items() # Load before assigning self.hidden_items_file
-        self.hidden_items_file = self.HIDDEN_ITEMS_FILE # Keep for potential direct use elsewhere
-
-        # Mapping chemin → identifiant Treeview
-        self.path_to_item = {}
-
-        # Charger les préférences utilisateur (déjà effectuée plus haut)
-        # Restaurer la taille de la fenêtre
-        if self.window_geometry:
-            self.root.geometry(self.window_geometry)
-        # Restaurer les extensions sélectionnées
-        for ext, var in self.ext_vars.items():
-            var.set(ext in self.selected_extensions)
-        # Restaurer les éléments masqués
-        self.hidden_items = set(self.hidden_items_list)
-
-        # Indicateur de chargement initial
-        self.is_initial_loading = False
+        # Restore settings after loading preferences
+        # Restore selected extensions (done in create_widgets)
+        # Restore hidden items (already loaded in _load_initial_data)
 
         # Création de l'interface (nouvelle organisation avec un PanedWindow et Notebook)
         self.create_widgets()
         self.bind_events()
+        self.create_menu()
 
         # Si un chemin est chargé depuis les préférences, charger l'arborescence
         if self.path_var.get():
@@ -134,17 +119,6 @@ class ProjectExplorerApp:
 
         # Protocole de fermeture pour sauvegarder les préférences
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-
-        # Ajouter un ensemble pour les extensions connues
-        self.known_text_extensions = {
-            '.txt', '.py', '.md', '.c', '.cpp', '.h', '.java', '.js', '.html', '.css',
-            '.json', '.xml', '.csv', '.ini', '.cfg', '.bat', '.sh', '.rb', '.php', '.pl',
-            '.yaml', '.yml', '.sql', '.r', '.go', '.kt', '.swift', '.ts', '.tsx', '.jsx', '.tex',
-            '.log'
-        }
-
-        # Créer le menu principal
-        self.create_menu()
 
     def load_icons(self, folder_path, file_path, size=(16, 16)):
         """
@@ -183,7 +157,7 @@ class ProjectExplorerApp:
                 with open(self.FAVORITES_FILE, 'r', encoding='utf-8') as f:
                     self.favorites = set(json.load(f))
                 logging.info("Favoris chargés avec succès.")
-            except Exception as e:
+            except (json.JSONDecodeError, IOError) as e:
                 logging.error(f"Erreur lors du chargement des favoris depuis {self.FAVORITES_FILE}: {e}")
                 self.favorites = set()
         else:
@@ -196,8 +170,8 @@ class ProjectExplorerApp:
         try:
             with open(self.FAVORITES_FILE, 'w', encoding='utf-8') as f:
                 json.dump(list(self.favorites), f, ensure_ascii=False, indent=4)
-            logging.info("Favoris sauvegardés avec succès.")
-        except Exception as e:
+                logging.info("Favoris sauvegardés avec succès.")
+        except IOError as e:
             logging.error(f"Erreur lors de la sauvegarde des favoris dans {self.FAVORITES_FILE}: {e}")
 
     def load_hidden_items(self):
@@ -209,7 +183,7 @@ class ProjectExplorerApp:
                 with open(self.HIDDEN_ITEMS_FILE, 'r', encoding='utf-8') as f:
                     self.hidden_items = set(json.load(f))
                 logging.info("Éléments masqués chargés avec succès.")
-            except Exception as e:
+            except (json.JSONDecodeError, IOError) as e:
                 logging.error(f"Erreur lors du chargement des éléments masqués depuis {self.HIDDEN_ITEMS_FILE}: {e}")
                 self.hidden_items = set()
         else:
@@ -222,8 +196,8 @@ class ProjectExplorerApp:
         try:
             with open(self.HIDDEN_ITEMS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(list(self.hidden_items), f, ensure_ascii=False, indent=4)
-            logging.info("Éléments masqués sauvegardés avec succès.")
-        except Exception as e:
+                logging.info("Éléments masqués sauvegardés avec succès.")
+        except IOError as e:
             logging.error(f"Erreur lors de la sauvegarde des éléments masqués dans {self.HIDDEN_ITEMS_FILE}: {e}")
 
     def load_preferences(self):
@@ -251,7 +225,7 @@ class ProjectExplorerApp:
                 known_extensions = prefs.get("known_extensions", [])
                 if known_extensions:
                     self.known_text_extensions = set(known_extensions)
-            except Exception as e:
+            except (json.JSONDecodeError, IOError) as e:
                 logging.error(f"Erreur lors du chargement des préférences depuis {self.PREFERENCES_FILE}: {e}")
 
     def save_preferences(self):
@@ -276,7 +250,7 @@ class ProjectExplorerApp:
             with open(self.PREFERENCES_FILE, 'w', encoding='utf-8') as f:
                 json.dump(prefs, f, ensure_ascii=False, indent=4)
             logging.info("Préférences sauvegardées avec succès.")
-        except Exception as e:
+        except IOError as e:
             logging.error(f"Erreur lors de la sauvegarde des préférences dans {self.PREFERENCES_FILE}: {e}")
 
     def create_widgets(self):
@@ -702,7 +676,7 @@ class ProjectExplorerApp:
                         messagebox.showerror("Erreur", "Permission refusée. Vous n'avez pas les droits nécessaires pour supprimer cet élément.")
                     except Exception as e:
                         logging.error(f"Erreur lors de la suppression de '{path}': {e}")
-                        messagebox.showerror("Erreur", f"Erreur lors de la suppression: {e}")
+                        messagebox.showerror("Erreur lors de la suppression: {e}")
 
     def copy_path(self):
         """
@@ -1159,11 +1133,8 @@ class ProjectExplorerApp:
 
     # Modified update_selected_files to combine extension-based and manual selections.
     def update_selected_files(self):
-        print("update_selected_files CALLED from checkbox change!") # Debug print
-        print("update_selected_files called") # Debug print
         repo_path = self.path_var.get()
         selected_exts = [ext for ext, var in self.ext_vars.items() if var.get()]
-        print(f"Selected extensions: {selected_exts}") # Debug print
         dynamic_selected = {}
         # Parcours du répertoire
         for root_dir, dirs, files in os.walk(repo_path):
@@ -1176,12 +1147,10 @@ class ProjectExplorerApp:
                     file_path = os.path.join(root_dir, file)
                     if os.path.splitext(file)[1] in selected_exts:
                         dynamic_selected[file_path] = True
-                        print(f"File with selected extension found: {file_path}") # Debug print
         # Combine computed selections with manual selections.
         self.selected_files = {}
         self.selected_files.update(dynamic_selected)
         self.selected_files.update(self.manual_selected_files)
-        print("Selected Files:", self.selected_files) # Debug print
         self.update_selected_files_listbox() # Mettre à jour la liste des fichiers selectionnés
         self.schedule_generate_code()
         
@@ -1193,12 +1162,10 @@ class ProjectExplorerApp:
 
     # Update manual file selection to use the new manual_selected_files dict.
     def add_selected_file(self, path):
-        print(f"add_selected_file called with path: {path}") # Debug print
         self.manual_selected_files[path] = True
         self.update_selected_files()
 
     def remove_selected_file(self, path):
-        print(f"remove_selected_file called with path: {path}") # Debug print
         if path in self.manual_selected_files or path in self.selected_files: # Correction ici pour gerer la deselection manuelle et par extention
             if path in self.manual_selected_files:
                 del self.manual_selected_files[path]
@@ -1208,7 +1175,6 @@ class ProjectExplorerApp:
 
     # The on_generate_code method is called via schedule_generate_code
     def on_generate_code(self):
-        print("on_generate_code called") # Debug print
         self.code_text.configure(state='normal')
         self.code_text.delete('1.0', tk.END)
         code = ""
