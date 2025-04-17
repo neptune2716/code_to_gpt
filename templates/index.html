@@ -32,6 +32,31 @@
   </script>
   <!-- Alpine.js -->
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x/dist/cdn.min.js" defer></script>
+  <!-- Parameters panel component -->
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('paramPanel', () => ({
+        open: false,
+        known_exts: [],
+        hidden_exts: [],
+        init() {
+          fetch('/api/options')
+            .then(r => r.json())
+            .then(d => { this.known_exts = d.known_extensions; this.hidden_exts = d.hidden_extensions; });
+        },
+        toggle() {
+          this.open = !this.open;
+        },
+        save() {
+          fetch('/api/options/hidden_extensions', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({hidden_extensions: this.hidden_exts})
+          }).then(() => { this.open = false; $('#tree').jstree(true).refresh(); });
+        }
+      }));
+    });
+  </script>
 </head>
 <body class="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
   <!-- Hidden input to pass base directory to JS -->
@@ -68,7 +93,7 @@
       <!-- Tabs -->
       <div class="flex space-x-4 mb-4">
         <button :class="tab==='options'?active:'px-4 py-2 rounded'" @click="tab='options'">Options</button>
-        <button :class="tab==='code'?active:'px-4 py-2 rounded'" @click="tab='code'">Code</button>
+        <button :class="tab==='code'?active:'px-4 py-2 rounded'" @click="fetchCode()">Code</button> <!-- Trigger fetchCode on click -->
       </div>
       <!-- Options Tab -->
       <div class="flex-1 overflow-auto" x-show="tab==='options'" x-data="optionsPanel()" x-init="fetchOptions(), fetchHidden()">
@@ -121,6 +146,17 @@
             <input x-model="newHidden" name="newHidden" type="text" placeholder="Path to hide" class="flex-1 px-2 py-1 border rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100">
             <button @click="addHidden()" class="px-3 py-1 bg-gray-600 text-white rounded">Hide</button>
           </div>
+        </div>
+      </div>
+      <!-- Code Tab -->
+      <div class="flex-1 flex flex-col" x-show="tab==='code'">
+        <h2 class="font-semibold mb-2">Generated Code</h2>
+        <textarea id="code-content" readonly class="flex-1 w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono text-sm" x-text="code"></textarea>
+        <!-- Placeholder for copy buttons -->
+        <div class="mt-2 space-x-2">
+          <button @click="copyTree()" class="px-3 py-1 bg-blue-600 text-white rounded">Copy Tree</button>
+          <button @click="copyCode()" class="px-3 py-1 bg-blue-600 text-white rounded">Copy Code</button>
+          <button @click="copyAll()" class="px-3 py-1 bg-blue-600 text-white rounded">Copy All</button>
         </div>
       </div>
     </div>
